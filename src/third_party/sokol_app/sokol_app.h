@@ -4143,13 +4143,6 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                 }
                 return 0;
 
-            case WM_PAINT:
-                {
-                    PAINTSTRUCT ps;
-                    BeginPaint(hwnd, &ps);
-                    EndPaint(hwnd, &ps);
-                } break;
-
             case WM_SYSCOMMAND:
                 switch (wParam & 0xFFF0) {
                     case SC_SCREENSAVE:
