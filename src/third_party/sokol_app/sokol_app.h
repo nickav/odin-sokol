@@ -2756,6 +2756,8 @@ _SOKOL_PRIVATE const _sapp_gl_fbconfig* _sapp_gl_choose_fbconfig(const _sapp_gl_
 #pragma comment (lib, "dxgi.lib")
 #pragma comment (lib, "d3d11.lib")
 #pragma comment (lib, "dxguid.lib")
+#pragma comment (lib, "advapi32")
+#pragma comment (lib, "gdi32")
 #endif
 #endif
 
@@ -4082,6 +4084,47 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
     /* FIXME: refresh rendering during resize with a WM_TIMER event */
     if (!_sapp_win32_in_create_window) {
         switch (uMsg) {
+            case WM_CREATE:
+                {
+                    typedef HRESULT Win32_DwmSetWindowAttribute(HWND hwnd, DWORD dwAttribute, LPCVOID pvAttribute, DWORD cbAttribute);
+                    #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+                    #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+                    #endif
+
+                    static Win32_DwmSetWindowAttribute *DwmSetWindowAttribute = NULL;
+                    static bool dark_mode_initted = false;
+                    if (!dark_mode_initted)
+                    {
+                        dark_mode_initted = true;
+                        HMODULE dwmapi = LoadLibraryA("dwmapi.dll");
+                        if (dwmapi)
+                        {
+                            DwmSetWindowAttribute = (Win32_DwmSetWindowAttribute *)GetProcAddress(dwmapi, "DwmSetWindowAttribute");
+                        }
+                    }
+
+                    if (DwmSetWindowAttribute)
+                    {
+                        DWORD use_light_theme;
+                        DWORD dataSize = sizeof(use_light_theme);
+                        LSTATUS status = RegGetValueA(HKEY_CURRENT_USER,
+                            "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                            "AppsUseLightTheme", RRF_RT_ANY, NULL, &use_light_theme, &dataSize);
+
+                        if (status == ERROR_SUCCESS)
+                        {
+                            if (!use_light_theme)
+                            {
+                                BOOL value = TRUE;
+                                DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+                            }
+                        }
+
+                        BOOL value = TRUE;
+                        DwmSetWindowAttribute(hWnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+                    }
+                } break;
+
             case WM_CLOSE:
                 /* only give user a chance to intervene when sapp_quit() wasn't already called */
                 if (!_sapp.quit_ordered) {
@@ -4099,6 +4142,14 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
                     PostQuitMessage(0);
                 }
                 return 0;
+
+            case WM_PAINT:
+                {
+                    PAINTSTRUCT ps;
+                    BeginPaint(hwnd, &ps);
+                    EndPaint(hwnd, &ps);
+                } break;
+
             case WM_SYSCOMMAND:
                 switch (wParam & 0xFFF0) {
                     case SC_SCREENSAVE:
@@ -4199,15 +4250,17 @@ _SOKOL_PRIVATE LRESULT CALLBACK _sapp_win32_wndproc(HWND hWnd, UINT uMsg, WPARAM
 }
 
 _SOKOL_PRIVATE void _sapp_win32_create_window(void) {
-    WNDCLASSW wndclassw;
-    memset(&wndclassw, 0, sizeof(wndclassw));
-    wndclassw.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    wndclassw.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
-    wndclassw.hInstance = GetModuleHandleW(NULL);
-    wndclassw.hCursor = LoadCursor(NULL, IDC_ARROW);
-    wndclassw.hIcon = LoadIcon(NULL, IDI_WINLOGO);
-    wndclassw.lpszClassName = L"SOKOLAPP";
-    RegisterClassW(&wndclassw);
+    WNDCLASSEXW wc;
+    memset(&wc, 0, sizeof(wc));
+    wc.cbSize = sizeof(wc);
+    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.lpfnWndProc = (WNDPROC) _sapp_win32_wndproc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hIcon = LoadIcon(NULL, IDI_WINLOGO);
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    wc.lpszClassName = L"SOKOLAPP";
+    RegisterClassExW(&wc);
 
     DWORD win_style;
     const DWORD win_ex_style = WS_EX_APPWINDOW | WS_EX_WINDOWEDGE;

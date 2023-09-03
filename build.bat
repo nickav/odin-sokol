@@ -1,4 +1,7 @@
 @echo off
 
+set project_root=%~dp0%
 
-W:\Odin\odin run src/main.odin -out:sokol.exe
+pushd %project_root%
+odin run src/main.odin -file -out:sokol.exe
+popd
